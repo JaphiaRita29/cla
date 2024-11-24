@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dropbox.js/10.28.0/Dropbox-sdk.min.js"></script>
+    <script src="https://cdn.auth0.com/js/auth0-spa-js/2.0/auth0-spa-js.production.js"></script>
+    <title>Todo List App</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0; /* Example background color */
+        }
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); /* Adding shadow */
+            background-color: #fff; /* White background for containers */
+        }
+        h1 {
+            text-align: center;
+        }
+        form {
+            margin-bottom: 20px;
+        }
+        input, button {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        li {
+            padding: 10px;
+            border: 1px solid #ccc;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .task-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        .hidden {
+            display: none;
+          }
+          
+          label {
+            margin-bottom: 10px;
+            display: block;
+          }
+    </style>
+</head>
+<body>
+    <button id="btn-login" disabled="true" onclick="login()">Log in</button>
+    <button id="btn-logout" disabled="true" onclick="logout()">Log out</button>
+    <div class="container">
+        <h1>Todo List App</h1>
+        
+        <div id="signupFormContainer">
+            <h2>Sign Up</h2>
+            <form id="signupForm">
+                <input type="text" id="signupUsername" placeholder="Username" required>
+                <input type="password" id="signupPassword" placeholder="Password" required>
+                <button type="submit">Sign Up</button>
+            </form>
+        </div>
+
+        <div id="loginFormContainer">
+            <h2>Login</h2>
+            <form id="loginForm">
+                <input type="text" id="loginUsername" placeholder="Username" required>
+                <input type="password" id="loginPassword" placeholder="Password" required>
+                <button type="submit">Login</button>
+            </form>
+        </div>
+
+        <div id="todoAppContainer" style="display:none;">
+            <h2>Welcome, <span id="usernameDisplay"></span></h2>
+            <h2>Add Task</h2>
+            <form id="addTaskForm">
+                <input type="text" id="task" placeholder="Task" required>
+                <button type="submit">Add Task</button>
+            </form>
+            
+            <h2>Tasks</h2>
+            <ul id="taskList"></ul>
+            <button id="logoutButton">Logout</button>
+        </div>
+        <h2>Dropbox Integration</h2>
+        <input type="file" id="fileInput" />
+        <button id="uploadButton">Upload to Dropbox</button>
+        <button id="downloadButton">Download from Dropbox</button>
+        <ul id="fileList"></ul>
+    </div>
+    <div class="hidden" id="gated-content">
+        <p>
+          You're seeing this content because you're currently
+          <strong>logged in</strong>.
+        </p>
+        <label>
+          Access token:
+          <pre id="ipt-access-token"></pre>
+        </label>
+        <label>
+          User profile:
+          <pre id="ipt-user-profile"></pre>
+        </label>
+      </div>
+
+    <script>
+        const signupForm = document.getElementById('signupForm');
+        const loginForm = document.getElementById('loginForm');
+        const addTaskForm = document.getElementById('addTaskForm');
+        const taskList = document.getElementById('taskList');
+        const usernameDisplay = document.getElementById('usernameDisplay');
+        const signupFormContainer = document.getElementById('signupFormContainer');
+        const loginFormContainer = document.getElementById('loginFormContainer');
+        const todoAppContainer = document.getElementById('todoAppContainer');
+        const logoutButton = document.getElementById('logoutButton');
+        const fetchAuthConfig = () => fetch("/auth_config.json");
+        const dropboxAccessToken = 'sl.CBVIp0GYZpmkWkvZAdLwp1jvN_umasEo9K608K7dHvvNo96ipigZA0PoYKKSBg1lVQaxS4jo6SDeME9eOCoi0rkDB18bkDCSCMAUfd8SsTcUG6xjS_X5wDmBB-icdZSeUl6Lh-ZcLpa0KXE'; // Replace with your Dropbox access token
+        const dbx = new Dropbox.Dropbox({ accessToken: dropboxAccessToken });
+
+        let userId = localStorage.getItem('userId');
+        let username = localStorage.getItem('username');
+        let auth0Client = null;
+
+        
+        
+        if (userId && username) {
+            showTodoApp(username);
+        }
+
+        signupForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('signupUsername').value;
+            const password = document.getElementById('signupPassword').value;
+            const response = await fetch('/signup', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ username, password })
+            });
+            const data = await response.json();
+            if (data.success) {
+                alert('Signup successful, please login.');
+                signupFormContainer.style.display = 'none';
+                loginFormContainer.style.display = 'block';
+            } else {
+                alert('Signup failed');
+            }
+        });
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+            const response = await fetch('/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ username, password })
+            });
+            const data = await response.json();
+            if (data.success) {
+                userId = data.userId;
+                localStorage.setItem('userId', userId);
+                localStorage.setItem('username', username);
+                showTodoApp(username);
+                loadTasks();
+            } else {
+                alert('Login failed');
+            }
+        });
+
+        addTaskForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const task = document.getElementById('task').value;
+            const response = await fetch(`/users/${userId}/tasks`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ task })
+            });
+            const data = await response.json();
+            alert('Task added');
+            loadTasks();
+        });
+
+        logoutButton.addEventListener('click', () => {
+            localStorage.removeItem('userId');
+            localStorage.removeItem('username');
+            userId = null;
+            username = null;
+            signupFormContainer.style.display = 'block';
+            loginFormContainer.style.display = 'block';
+            todoAppContainer.style.display = 'none';
+        });
+
+        async function loadTasks() {
+    const response = await fetch(`/users/${userId}/tasks`);
+    const tasks = await response.json();
+    taskList.innerHTML = '';
+    if (tasks.length === 0) {
+        taskList.innerHTML = '<li>You have no tasks for now, please add a task</li>';
+    } else {
+        tasks.forEach((task, index) => {
+            const li = document.createElement('li');
+            const taskCounter = index + 1;
+            li.innerHTML = `
+                <span>Task ${taskCounter}: ${task.task}</span>
+                <div class="task-buttons">
+                    <button onclick="updateTask('${task._id}')">Update</button>
+                    <button onclick="removeTask('${task._id}')">Remove</button>
+                </div>
+            `;
+            taskList.appendChild(li);
+        });
+    }
+}
+
+
+        async function updateTask(taskId) {
+            const newTask = prompt('Enter new task:');
+            if (newTask) {
+                const response = await fetch(`/users/${userId}/tasks/${taskId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ task: newTask })
+                });
+                const data = await response.json();
+                alert('Task updated');
+                loadTasks();
+            }
+        }
+
+        async function removeTask(taskId) {
+            const response = await fetch(`/users/${userId}/tasks/${taskId}`, {
+                method: 'DELETE'
+            });
+            const data = await response.json();
+            alert('Task removed');
+            loadTasks();
+        }
+
+        function showTodoApp(username) {
+            usernameDisplay.innerText = username;
+            signupFormContainer.style.display = 'none';
+            loginFormContainer.style.display = 'none';
+            todoAppContainer.style.display = 'block';
+        }
+
+        const configureClient = async () => {
+            const response = await fetchAuthConfig();
+            const config = await response.json();
+            auth0Client = await auth0.createAuth0Client({
+            domain: config.domain,
+            clientId: config.clientId
+            });
+        };
+        window.onload = async () => {
+            await configureClient();
+            updateUI();
+            const isAuthenticated = await auth0Client.isAuthenticated();
+
+  if (isAuthenticated) {
+    // show the gated content
+    return;
+  }
+
+  // NEW - check for the code and state parameters
+  const query = window.location.search;
+  if (query.includes("code=") && query.includes("state=")) {
+
+    // Process the login state
+    await auth0Client.handleRedirectCallback();
+    
+    updateUI();
+
+    // Use replaceState to redirect the user away and remove the querystring parameters
+    window.history.replaceState({}, document.title, "/");
+  }
+};
+        
+        const updateUI = async () => {
+            const isAuthenticated = await auth0Client.isAuthenticated();
+            document.getElementById("btn-logout").disabled = !isAuthenticated;
+            document.getElementById("btn-login").disabled = isAuthenticated;
+
+            if (isAuthenticated) {
+                document.getElementById("gated-content").classList.remove("hidden");
+            
+                document.getElementById(
+                "ipt-access-token"
+                ).innerHTML = await auth0Client.getTokenSilently();
+            
+                document.getElementById("ipt-user-profile").textContent = JSON.stringify(
+                await auth0Client.getUser()
+                );
+            
+            } else {
+                document.getElementById("gated-content").classList.add("hidden");
+            }
+        };
+        const login = async () => {
+            await auth0Client.loginWithRedirect({
+            authorizationParams: {
+                redirect_uri: window.location.origin
+            }
+            });
+        };
+        const logout = () => {
+            auth0Client.logout({
+            logoutParams: {
+                returnTo: window.location.origin
+            }
+            });
+        };
+        document.getElementById('uploadButton').addEventListener('click', async () => {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            if (file) {
+                try {
+                    const response = await dbx.filesUpload({ path: `/${file.name}`, contents: file });
+                    alert('File uploaded successfully');
+                } catch (error) {
+                    console.error('Error uploading file:', error);
+                    alert('File upload failed');
+                }
+            } else {
+                alert('Please select a file to upload');
+            }
+        });
+
+        document.getElementById('downloadButton').addEventListener('click', async () => {
+            try {
+                // Replace with the correct folder path if necessary
+                const response = await dbx.filesListFolder({ path: '' }); // Adjust the path here
+                const fileList = document.getElementById('fileList');
+                fileList.innerHTML = '';
+        
+                if (response.result.entries.length === 0) {
+                    alert('No files found in the specified Dropbox folder.');
+                    return;
+                }
+        
+                response.result.entries.forEach(file => {
+                    const li = document.createElement('li');
+                    li.textContent = file.name;
+        
+                    li.addEventListener('click', async () => {
+                        try {
+                            const downloadResponse = await dbx.filesDownload({ path: file.path_lower });
+                    
+                            const blob = downloadResponse.result.fileBlob;
+                            const url = URL.createObjectURL(blob);
+                            
+                            // Create an image object to ensure it's loaded before setting it as the background
+                            const img = new Image();
+                            img.onload = function() {
+                                document.body.style.backgroundImage = `url(${url})`;
+                                document.body.style.backgroundSize = 'cover';
+                                document.body.style.backgroundRepeat = 'no-repeat';
+                            };
+                            img.src = url;
+                    
+                            // Optional: Download the file to the user's device as well
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = file.name;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                        } catch (error) {
+                            console.error('Error downloading file:', error);
+                            alert('File download failed');
+                        }
+                    });
+                    
+        
+                    fileList.appendChild(li);
+                });
+            } catch (error) {
+                console.error('Error retrieving file list:', error);
+                alert('Failed to retrieve file list. Please check your Dropbox folder path and API token.');
+            }
+        });
+        
+        
+    </script>
+</body>
+</html>
