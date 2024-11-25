@@ -1,0 +1,131 @@
+from mpi4py import MPI
+
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
+
+print(f"Hello from rank {rank} of {size}!")
+
+
+from mpi4py import MPI
+
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+
+if rank == 0:
+    # Send a message from rank 0
+    data = "Hello from rank 0"
+    comm.send(data, dest=1, tag=11)
+    print("Rank 0 sent:", data)
+elif rank == 1:
+    # Receive the message at rank 1
+    data = comm.recv(source=0, tag=11)
+    print("Rank 1 received:", data)
+
+
+from mpi4py import MPI
+import random
+
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
+
+# Number of iterations for Monte Carlo
+n_total = 1000000
+n_per_process = n_total // size
+
+# Function to calculate points inside the unit circle
+def compute_pi(n):
+    count = 0
+    for _ in range(n):
+        x, y = random.random(), random.random()
+        if x**2 + y**2 <= 1.0:
+            count += 1
+    return count
+
+# Each process computes its own count
+local_count = compute_pi(n_per_process)
+
+# Gather all counts to rank 0
+global_count = comm.reduce(local_count, op=MPI.SUM, root=0)
+
+# Rank 0 computes Pi
+if rank == 0:
+    pi = 4 * global_count / n_total
+    print(f"Estimated value of Pi: {pi}")
+
+sudo apt update
+sudo apt install openjdk-11-jdk -y
+java -version
+wget https://dlcdn.apache.org/hadoop/common/hadoop-3.3.6/hadoop-3.3.6.tar.gz
+
+tar -xzf hadoop-3.3.6.tar.gz
+sudo mv hadoop-3.3.6 /usr/local/hadoop
+.bashrc file
+export HADOOP_HOME=/usr/local/hadoop
+export PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
+export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
+export HADOOP_CLASSPATH=$JAVA_HOME/lib/tools.jar
+source ~/.bashrc
+$HADOOP_HOME/etc/hadoop:
+
+hadoop-env.sh: Set the JAVA_HOME:
+export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+
+core-site.xml:
+<configuration>
+  <property>
+    <name>fs.defaultFS</name>
+    <value>hdfs://localhost:9000</value>
+  </property>
+</configuration>
+
+hdfs-site.xml
+<configuration>
+  <property>
+    <name>dfs.replication</name>
+    <value>1</value>
+  </property>
+  <property>
+    <name>dfs.name.dir</name>
+    <value>file:///usr/local/hadoop/hdfs/namenode</value>
+  </property>
+  <property>
+    <name>dfs.data.dir</name>
+    <value>file:///usr/local/hadoop/hdfs/datanode</value>
+  </property>
+</configuration>
+
+
+mapred-site.xml
+cp mapred-site.xml.template mapred-site.xml
+<configuration>
+  <property>
+    <name>mapreduce.framework.name</name>
+    <value>yarn</value>
+  </property>
+</configuration>
+
+
+yarn-site.xml
+<configuration>
+  <property>
+    <name>yarn.nodemanager.aux-services</name>
+    <value>mapreduce_shuffle</value>
+  </property>
+</configuration>
+
+hdfs namenode -format
+start-dfs.sh
+start-yarn.sh
+
+http://localhost:9870/ (HDFS).
+ http://localhost:8088/ (YARN).
+
+ hdfs dfs -mkdir /input
+hdfs dfs -put /usr/local/hadoop/etc/hadoop/*.xml /input
+hadoop jar $HADOOP_HOME/share/hadoop/mapreduce/hadoop-mapreduce-examples-3.3.6.jar wordcount /input /output
+hdfs dfs -cat /output/*
+stop-dfs.sh
+stop-yarn.sh
